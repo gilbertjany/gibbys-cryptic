@@ -325,7 +325,7 @@ const DEFAULT_PUZZLE = {
   title: "gibby's little cryptic",
   headline: "a little wordplay for yu",
   subtitle: "made for your recurring need of cute things",
-  dateLine: "Saturday, October 31",
+  dateLine: "Sunday, November 1",
   clue: "Partner in crime? Initially, gangsters in Rome loot fancy rings, including emerald, never detected",
   answer: "GIRLFRIEND",
   definition: "Partner in crime?",
@@ -336,6 +336,8 @@ const DEFAULT_PUZZLE = {
 };
 
 const OLD_SUBTITLE = "One cryptic clue. A few good minutes. A small daily delight.";
+// Earlier published dates. A copy saved on a phone with one of these is updated to the current date.
+const OLD_DATES = ["Saturday, October 31", "Saturday, October 24"];
 const PUZZLE_KEY = "gibbys-cryptic.puzzle.v1";
 const PROGRESS_KEY = "gibbys-cryptic.progress.v1";
 const STREAK_KEY = "gibbys-cryptic.streak.v1";
@@ -366,7 +368,7 @@ function sanitize(c) {
     title: String(c.title ?? d.title),
     headline: String(c.headline ?? d.headline),
     subtitle: (c.subtitle == null || c.subtitle === OLD_SUBTITLE) ? d.subtitle : String(c.subtitle),
-    dateLine: String(c.dateLine ?? d.dateLine),
+    dateLine: (c.dateLine == null || OLD_DATES.includes(String(c.dateLine).trim())) ? d.dateLine : String(c.dateLine),
     clue: String(c.clue || d.clue).trim(),
     answer,
     definition: String(c.definition ?? "").trim(),
