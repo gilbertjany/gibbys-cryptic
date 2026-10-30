@@ -173,6 +173,10 @@ mark.fod{background:var(--lav);border-radius:3px;box-shadow:0 0 0 2px var(--lav)
 .player{width:100%;border-radius:16px;overflow:hidden;background:#000}
 .player iframe{display:block;width:100%;aspect-ratio:16/9;border:0}
 .player video{display:block;width:100%;max-height:70dvh}
+.surprise-wrap{position:fixed;inset:0;z-index:40;background:#000;display:none;align-items:center;justify-content:center}
+.surprise-wrap.on{display:flex}
+.surprise-wrap video{width:100%;height:100%;object-fit:contain;background:#000}
+.surprise-close{position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:12px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.18);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;padding:0}
 
 /* toast + burst */
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 24px);transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#30283a;color:#fff;padding:11px 16px;border-radius:14px;font-size:13px;transition:.2s ease;z-index:30;max-width:calc(100vw - 32px);text-align:center}
@@ -257,7 +261,13 @@ mark.fod{background:var(--lav);border-radius:3px;box-shadow:0 0 0 2px var(--lav)
   </div>
 </section>
 
-<!-- video -->
+<!-- surprise video uploaded to the site (plays full screen) -->
+<div class="surprise-wrap" id="surpriseWrap" aria-hidden="true">
+  <video id="surpriseVideo" preload="auto" controls></video>
+  <button class="surprise-close" id="closeSurprise" aria-label="Close video">✕</button>
+</div>
+
+<!-- video from a link -->
 <section class="sheet" id="videoSheet" role="dialog" aria-modal="true" aria-label="Your surprise">
   <div class="sheet-top"><h2>Your surprise ✳</h2><button class="icon-btn" id="closeVideo" aria-label="Close video">✕</button></div>
   <div class="player" id="player"></div>
@@ -285,7 +295,7 @@ mark.fod{background:var(--lav);border-radius:3px;box-shadow:0 0 0 2px var(--lav)
   <div class="field"><label for="fInd">Indicators (hint 2)</label><textarea id="fInd" rows="2"></textarea><span class="help">One per line, exactly as in the clue. They turn italic.</span></div>
   <div class="field"><label for="fFod">Fodder (hint 3)</label><textarea id="fFod" rows="2"></textarea><span class="help">One per line, exactly as in the clue. They get highlighted.</span></div>
   <div class="field"><label for="fExp">Wordplay explanation</label><textarea id="fExp" rows="3"></textarea></div>
-  <div class="field"><label for="fVideo">Video after solving (optional)</label><input id="fVideo" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://"><span class="help">YouTube, Vimeo, Google Drive, or a direct .mp4 link. The "Press for surprise..." button plays it after a correct solve.</span></div>
+  <div class="field"><label for="fVideo">Surprise video</label><input id="fVideo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="surprise.mp4"><span class="help">Leave as surprise.mp4 to play the video uploaded to the GitHub repo. You can also paste a YouTube, Vimeo, Google Drive or https:// video link.</span></div>
 
   <div class="group">
     <span class="group-label">Page text</span>
@@ -332,7 +342,7 @@ const DEFAULT_PUZZLE = {
   indicators: ["Initially"],
   fodder: ["gangsters in Rome loot fancy rings, including emerald, never detected"],
   explanation: "\"Initially\" means take the first letter of each word that follows: Gangsters In Rome Loot Fancy Rings, Including Emerald, Never Detected = GIRLFRIEND. \"Partner in crime?\" is the definition; the question mark flags that it's playful rather than literal.",
-  video: ""
+  video: "surprise.mp4"
 };
 
 const OLD_SUBTITLE = "One cryptic clue. A few good minutes. A small daily delight.";
@@ -363,7 +373,7 @@ function sanitize(c) {
   const d = DEFAULT_PUZZLE;
   const answer = String(c.answer || d.answer).toUpperCase().replace(/[^A-Z \-]/g, "").replace(/\s+/g, " ").trim() || d.answer;
   let video = String(c.video || "").trim();
-  if (video && !/^https?:\/\//i.test(video)) video = "";
+  if (!/^https?:\/\//i.test(video) && !/^[\w\-]+\.(mp4|mov|m4v|webm)$/i.test(video)) video = d.video;
   return {
     title: String(c.title ?? d.title),
     headline: String(c.headline ?? d.headline),
@@ -701,6 +711,7 @@ function openResult() {
   $("resultNote").className = "note " + (prog.solved ? "good" : "info");
   $("resultNote").textContent = prog.solved ? "Correct! You solved today's clue." : "No worries, here's how it works. The next one's yours.";
   $("surpriseBtn").hidden = !prog.solved;
+  if (prog.solved) prepareSurprise();
   $("resultAnswer").textContent = puzzle.answer;
   $("statTime").textContent = fmtTime((prog.end || Date.now()) - (prog.start || prog.end || Date.now()));
   $("statHints").textContent = prog.hintsUsed;
@@ -733,23 +744,77 @@ function videoSource(url) {
   if (/\.(mp4|m4v|mov|webm)(\?|#|$)/i.test(url)) return { kind: "video", src: url };
   return { kind: "link", src: url };
 }
-$("surpriseBtn").addEventListener("click", () => {
-  if (!puzzle.video) { toast(shared ? "No surprise has been set for this clue." : "No video yet. Add a link in the puzzle studio (gear button)."); return; }
-  const v = videoSource(puzzle.video);
-  if (v.kind === "link") { window.open(v.src, "_blank", "noopener"); return; }
-  const p = $("player"); p.innerHTML = "";
-  if (v.kind === "frame") {
-    const f = document.createElement("iframe");
-    f.src = v.src; f.title = "Your surprise video";
-    f.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media";
-    f.allowFullscreen = true;
-    p.appendChild(f);
-  } else {
-    const el = document.createElement("video");
-    el.src = v.src; el.controls = true; el.playsInline = true; el.setAttribute("playsinline", "");
-    p.appendChild(el);
-    el.play().catch(() => {});
+/* A video file kept next to this page (uploaded to the GitHub repo).
+   The default name is surprise.mp4; .mov and .m4v copies are tried too. */
+const isLink = v => /^https?:\/\//i.test(v);
+function fileCandidates() {
+  const v = puzzle.video || DEFAULT_PUZZLE.video;
+  if (v.toLowerCase() === DEFAULT_PUZZLE.video) return ["surprise.mp4", "surprise.mov", "surprise.m4v", "surprise.MP4", "surprise.MOV"];
+  return [v];
+}
+let sv = { list: [], i: 0, ready: false, missing: false, key: "" };
+function prepareSurprise() {
+  if (isLink(puzzle.video)) return;
+  const list = fileCandidates(), key = list.join("|");
+  if (sv.key === key && (sv.ready || sv.i > 0)) return;
+  sv = { list, i: 0, ready: false, missing: false, key };
+  $("surpriseVideo").src = list[0];
+  $("surpriseVideo").load();
+}
+$("surpriseVideo").addEventListener("loadedmetadata", () => { sv.ready = true; });
+$("surpriseVideo").addEventListener("error", () => {
+  if (!sv.list.length) return;
+  sv.i++;
+  if (sv.i < sv.list.length) { $("surpriseVideo").src = sv.list[sv.i]; $("surpriseVideo").load(); }
+  else sv.missing = true;
+});
+function closeSurprise() {
+  const v = $("surpriseVideo");
+  v.pause();
+  $("surpriseWrap").classList.remove("on");
+  $("surpriseWrap").setAttribute("aria-hidden", "true");
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+}
+function playSurpriseFile() {
+  if (sv.missing) { toast("The surprise video isn't uploaded yet."); return; }
+  const v = $("surpriseVideo"), wrap = $("surpriseWrap");
+  wrap.classList.add("on");
+  wrap.setAttribute("aria-hidden", "false");
+  try { v.currentTime = 0; } catch (e) {}
+  // Full screen: iPhone uses its own video player; other browsers fill the screen.
+  if (document.fullscreenEnabled && wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
+  const pr = v.play();
+  if (pr && pr.catch) pr.catch(() => {});
+  if (!document.fullscreenEnabled && typeof v.webkitEnterFullscreen === "function") {
+    const go = () => { try { v.webkitEnterFullscreen(); } catch (e) {} };
+    if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
   }
+}
+$("surpriseVideo").addEventListener("webkitendfullscreen", closeSurprise);
+$("surpriseVideo").addEventListener("ended", () => {
+  if (typeof $("surpriseVideo").webkitExitFullscreen === "function") { try { $("surpriseVideo").webkitExitFullscreen(); } catch (e) {} }
+  closeSurprise();
+});
+document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && $("surpriseWrap").classList.contains("on")) closeSurprise(); });
+$("closeSurprise").addEventListener("click", closeSurprise);
+
+$("surpriseBtn").addEventListener("click", () => {
+  const url = puzzle.video || DEFAULT_PUZZLE.video;
+  if (!isLink(url)) { playSurpriseFile(); return; }
+  const v = videoSource(url);
+  if (v.kind === "link") { window.open(v.src, "_blank", "noopener"); return; }
+  if (v.kind === "video") {
+    sv = { list: [v.src], i: 0, ready: false, missing: false, key: v.src };
+    $("surpriseVideo").src = v.src;
+    playSurpriseFile();
+    return;
+  }
+  const p = $("player"); p.innerHTML = "";
+  const f = document.createElement("iframe");
+  f.src = v.src; f.title = "Your surprise video";
+  f.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media";
+  f.allowFullscreen = true;
+  p.appendChild(f);
   openSheet("videoSheet");
 });
 $("closeVideo").addEventListener("click", closeSheet);
@@ -828,7 +893,8 @@ function readEditor() {
 }
 $("saveBtn").addEventListener("click", () => {
   if (!$("fAnswer").value.replace(/[^a-z]/gi, "")) { toast("Add an answer first."); return; }
-  if ($("fVideo").value.trim() && !/^https?:\/\//i.test($("fVideo").value.trim())) { toast("The video link should start with https://"); return; }
+  const fv = $("fVideo").value.trim();
+  if (fv && !/^https?:\/\//i.test(fv) && !/^[\w\-]+\.(mp4|mov|m4v|webm)$/i.test(fv)) { toast("Use a file name like surprise.mp4, or a link starting with https://"); return; }
   const next = readEditor();
   const changed = hashStr(next.clue + "|" + next.answer) !== pid;
   store(PUZZLE_KEY, next);
@@ -877,6 +943,7 @@ ROWS.forEach(r => {
   $("kb").appendChild(row);
 });
 document.addEventListener("keydown", e => {
+  if ($("surpriseWrap").classList.contains("on")) { if (e.key === "Escape") closeSurprise(); return; }
   if (openId) { if (e.key === "Escape") closeSheet(); return; }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (/^[a-z]$/i.test(e.key)) typeLetter(e.key.toUpperCase());
